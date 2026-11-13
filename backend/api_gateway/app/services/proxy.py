@@ -58,6 +58,7 @@ async def forward_request(
 
     if authenticated_user_id is not None:
         headers["X-Authenticated-User-Id"] = str(authenticated_user_id)
+        headers["X-Internal-Service-Secret"] = settings.INTERNAL_SERVICE_SECRET
 
     # Read the incoming request body
     body = await request.body()
