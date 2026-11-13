@@ -3,12 +3,43 @@ import httpx
 
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
+from app.config.settings import settings
 
+async def validate_access_token(request: Request):
+    authorization = request.headers.get("Authorization")
+
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header is missing"
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{settings.AUTH_SERVICE_URL}/auth/validate",
+                headers={"Authorization": authorization}
+            )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired access token"
+            )
+
+        return response.json()
+
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=502,
+            detail="Authentication service is unavailable"
+        )
 
 async def forward_request(
     request: Request,
     target_url: str,
-    path: str
+    path: str,
+    authenticated_user_id: int | None = None
 ):
     # Build the destination URL
     url = f"{target_url.rstrip('/')}/{path}"
@@ -20,9 +51,13 @@ async def forward_request(
         if key.lower() not in {
             "host",
             "content-length",
-            "connection"
+            "connection",
+            "x-authenticated-user-id"
         }
     }
+
+    if authenticated_user_id is not None:
+        headers["X-Authenticated-User-Id"] = str(authenticated_user_id)
 
     # Read the incoming request body
     body = await request.body()

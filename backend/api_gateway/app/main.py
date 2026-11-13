@@ -2,7 +2,10 @@
 from fastapi import FastAPI, Request
 
 from app.config.settings import settings
-from app.services.proxy import forward_request
+from app.services.proxy import (
+    forward_request,
+    validate_access_token
+)
 
 
 app = FastAPI(
@@ -17,6 +20,7 @@ def root():
     return {"message": "API Gateway is running"}
 
 
+
 @app.api_route(
     "/auth/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"]
@@ -26,4 +30,19 @@ async def auth_gateway(path: str, request: Request):
         request=request,
         target_url=settings.AUTH_SERVICE_URL,
         path=f"auth/{path}"
+    )
+
+
+@app.api_route(
+    "/users/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"]
+)
+async def user_gateway(path: str, request: Request):
+    user_data = await validate_access_token(request)
+
+    return await forward_request(
+        request=request,
+        target_url=settings.USER_SERVICE_URL,
+        path=f"users/{path}",
+        authenticated_user_id=user_data["user_id"]
     )
