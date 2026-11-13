@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_NAME: str = "user_db"
 
+    INTERNAL_SERVICE_SECRET: str
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

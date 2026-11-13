@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.auth import RegisterRequest, UserResponse, LoginRequest, TokenResponse, RefreshTokenRequest
+from app.schemas.auth import RegisterRequest, UserResponse, LoginRequest, TokenResponse, RefreshTokenRequest, ChangePasswordRequest
 from app.services.security import hash_password, verify_password, hash_refresh_token
 from app.models.refresh_token import RefreshToken
 from app.services.token import (
@@ -13,6 +13,8 @@ from app.services.token import (
 )
 from jwt.exceptions import InvalidTokenError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.services.password_service import change_user_password
+import jwt
 
 router = APIRouter(
     prefix="/auth",
@@ -317,4 +319,74 @@ def validate_access_token(
         "user_id": user.id,
         "email": user.email,
         "is_active": user.is_active
+    }
+
+
+@router.post("/change-password")
+def change_password(
+    password_data: ChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(
+        HTTPBearer()
+    ),
+    db: Session = Depends(get_db),
+):
+
+    # Step 1: Validate the JWT
+    try:
+        payload = verify_token(credentials.credentials)
+
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid access token",
+            )
+
+        if payload.get("type") != "access":
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid access token",
+            )
+
+        user_id = int(payload["sub"])
+
+    except (jwt.InvalidTokenError, ValueError, KeyError, TypeError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired access token",
+        )
+
+
+    # Step 2: Validate new password using the
+    # existing registration password rules.
+    # Reuse your existing password validator here.
+
+    # Step 3: Call the password service
+    result = change_user_password(
+        db=db,
+        user_id=user_id,
+        current_password=password_data.current_password,
+        new_password=password_data.new_password,
+    )
+
+    # Step 4: Handle possible results
+    if result == "USER_NOT_FOUND":
+        raise HTTPException(
+            status_code=401,
+            detail="User not found or inactive",
+        )
+
+    if result == "INVALID_CURRENT_PASSWORD":
+        raise HTTPException(
+            status_code=400,
+            detail="Current password is incorrect",
+        )
+
+    if result == "SAME_PASSWORD":
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be different",
+        )
+
+    return {
+        "message": "Password changed successfully"
     }

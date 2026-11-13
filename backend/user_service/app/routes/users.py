@@ -2,31 +2,55 @@ from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.user import UserProfileCreate, UserProfileResponse
-from app.services.user_service import create_user_profile
-from app.services.user_service import get_user_profile
-from app.schemas.user import UserProfileUpdate
-from app.services.user_service import update_user_profile
+
+from app.schemas.user import (
+    UserProfileCreate,
+    UserProfileUpdate,
+    UserProfileResponse
+)
+
+from app.services.user_service import (
+    create_user_profile,
+    get_user_profile,
+    update_user_profile
+)
+
+import secrets
+
+from app.config.settings import settings
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"]
 )
 
+def verify_internal_service(
+    internal_secret: str = Header(
+        ...,
+        alias="X-Internal-Service-Secret"
+    )
+):
+    if not secrets.compare_digest(
+        internal_secret,
+        settings.INTERNAL_SERVICE_SECRET
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized service request"
+        )
+
 @router.post(
     "/profile",
     response_model=UserProfileResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_internal_service)]
 )
 def create_profile(
     profile_data: UserProfileCreate,
     auth_user_id: int = Header(..., alias="X-Authenticated-User-Id"),
     db: Session = Depends(get_db)
 ):
-    # Temporary development placeholder.
-    # We will replace this with the authenticated user ID
-    # obtained from JWT validation before testing this endpoint.
-    #auth_user_id = None
+
 
     new_profile = create_user_profile(
         db=db,
@@ -44,7 +68,8 @@ def create_profile(
 
 @router.get(
     "/profile",
-    response_model=UserProfileResponse
+    response_model=UserProfileResponse,
+    dependencies=[Depends(verify_internal_service)]
 )
 def read_profile(
     auth_user_id: int = Header(..., alias="X-Authenticated-User-Id"),
@@ -68,7 +93,8 @@ def read_profile(
 
 @router.put(
     "/profile",
-    response_model=UserProfileResponse
+    response_model=UserProfileResponse,
+    dependencies=[Depends(verify_internal_service)]
 )
 def update_profile(
     profile_data: UserProfileUpdate,
